@@ -1,33 +1,26 @@
 #include <Arduino.h>
-#include <SoftwareSerial.h>
+#include "Math.h"
+
 #include "A6lib.h"
-
-#ifdef ESP8266
-#define min _min
-#define max _max
-#endif
-
 /////////////////////////////////////////////
 // Public methods.
 //
-
-A6lib::A6lib(int transmitPin, int receivePin) {
-#ifdef ESP8266
-    A6conn = new SoftwareSerial(receivePin, transmitPin, false, 1024);
-#else
-    A6conn = new SoftwareSerial(receivePin, transmitPin, false);
-#endif
-    A6conn->setTimeout(100);
+template <typename SerialInterface>
+A6lib<SerialInterface>::A6lib(SerialInterface& serial): _serial{serial}
+{
+    _serial.setTimeout(100);
 }
 
-
-A6lib::~A6lib() {
-    delete A6conn;
+template <typename SerialInterface>
+A6lib<SerialInterface>::~A6lib() 
+{
+    // do nothing
 }
 
 
 // Block until the module is ready.
-byte A6lib::blockUntilReady(long baudRate) {
+template <typename SerialInterface>
+byte A6lib<SerialInterface>::blockUntilReady(long baudRate) {
 
     byte response = A6_NOTOK;
     while (A6_OK != response) {
@@ -46,9 +39,10 @@ byte A6lib::blockUntilReady(long baudRate) {
 
 // Initialize the software serial connection and change the baud rate from the
 // default (autodetected) to the desired speed.
-byte A6lib::begin(long baudRate) {
+template <typename SerialInterface>
+byte A6lib<SerialInterface>::begin(long baudRate) {
 
-    A6conn->flush();
+    _serial.flush();
 
     if (A6_OK != setRate(baudRate)) {
         return A6_NOTOK;
@@ -90,7 +84,8 @@ byte A6lib::begin(long baudRate) {
 
 // Reboot the module by setting the specified pin HIGH, then LOW. The pin should
 // be connected to a P-MOSFET, not the A6's POWER pin.
-void A6lib::powerCycle(int pin) {
+template <typename SerialInterface>
+void A6lib<SerialInterface>::powerCycle(int pin) {
     logln("Power-cycling module...");
 
     powerOff(pin);
@@ -104,26 +99,29 @@ void A6lib::powerCycle(int pin) {
     delay(20000);
     logln("Done.");
 
-    A6conn->flush();
+    _serial.flush();
 }
 
 
 // Turn the modem power completely off.
-void A6lib::powerOff(int pin) {
+template <typename SerialInterface>
+void A6lib<SerialInterface>::powerOff(int pin) {
     pinMode(pin, OUTPUT);
     digitalWrite(pin, LOW);
 }
 
 
 // Turn the modem power on.
-void A6lib::powerOn(int pin) {
+template <typename SerialInterface>
+void A6lib<SerialInterface>::powerOn(int pin) {
     pinMode(pin, OUTPUT);
     digitalWrite(pin, HIGH);
 }
 
 
 // Dial a number.
-void A6lib::dial(String number) {
+template <typename SerialInterface>
+void A6lib<SerialInterface>::dial(String number) {
     char buffer[50];
 
     logln("Dialing number...");
@@ -134,26 +132,30 @@ void A6lib::dial(String number) {
 
 
 // Redial the last number.
-void A6lib::redial() {
+template <typename SerialInterface>
+void A6lib<SerialInterface>::redial() {
     logln("Redialing last number...");
     A6command("AT+DLST", "OK", "CONNECT", A6_CMD_TIMEOUT, 2, NULL);
 }
 
 
 // Answer a call.
-void A6lib::answer() {
+template <typename SerialInterface>
+void A6lib<SerialInterface>::answer() {
     A6command("ATA", "OK", "yy", A6_CMD_TIMEOUT, 2, NULL);
 }
 
 
 // Hang up the phone.
-void A6lib::hangUp() {
+template <typename SerialInterface>
+void A6lib<SerialInterface>::hangUp() {
     A6command("ATH", "OK", "yy", A6_CMD_TIMEOUT, 2, NULL);
 }
 
 
 // Check whether there is an active call.
-callInfo A6lib::checkCallStatus() {
+template <typename SerialInterface>
+callInfo A6lib<SerialInterface>::checkCallStatus() {
     char number[50];
     String response = "";
     uint32_t respStart = 0;
@@ -182,7 +184,8 @@ callInfo A6lib::checkCallStatus() {
 
 
 // Get the strength of the GSM signal.
-int A6lib::getSignalStrength() {
+template <typename SerialInterface>
+int A6lib<SerialInterface>::getSignalStrength() {
     String response = "";
     uint32_t respStart = 0;
     int strength, error  = 0;
@@ -205,7 +208,8 @@ int A6lib::getSignalStrength() {
 
 
 // Get the real time from the modem. Time will be returned as yy/MM/dd,hh:mm:ss+XX
-String A6lib::getRealTimeClock() {
+template <typename SerialInterface>
+String A6lib<SerialInterface>::getRealTimeClock() {
     String response = "";
 
     // Issue the command and wait for the response.
@@ -218,7 +222,8 @@ String A6lib::getRealTimeClock() {
 
 
 // Send an SMS.
-byte A6lib::sendSMS(String number, String text) {
+template <typename SerialInterface>
+byte A6lib<SerialInterface>::sendSMS(String number, String text) {
     char ctrlZ[2] = { 0x1a, 0x00 };
     char buffer[100];
 
@@ -234,26 +239,29 @@ byte A6lib::sendSMS(String number, String text) {
     sprintf(buffer, "AT+CMGS=\"%s\"", number.c_str());
     A6command(buffer, ">", "yy", A6_CMD_TIMEOUT, 2, NULL);
     delay(100);
-    A6conn->println(text.c_str());
-    A6conn->println(ctrlZ);
-    A6conn->println();
+    _serial.println(text.c_str());
+    _serial.println(ctrlZ);
+    _serial.println();
 
     return A6_OK;
 }
 
 
 // Retrieve the number and locations of unread SMS messages.
-int A6lib::getUnreadSMSLocs(int* buf, int maxItems) {
+template <typename SerialInterface>
+int A6lib<SerialInterface>::getUnreadSMSLocs(int* buf, int maxItems) {
     return getSMSLocsOfType(buf, maxItems, "REC UNREAD");
 }
 
 // Retrieve the number and locations of all SMS messages.
-int A6lib::getSMSLocs(int* buf, int maxItems) {
+template <typename SerialInterface>
+int A6lib<SerialInterface>::getSMSLocs(int* buf, int maxItems) {
     return getSMSLocsOfType(buf, maxItems, "ALL");
 }
 
 // Retrieve the number and locations of all SMS messages.
-int A6lib::getSMSLocsOfType(int* buf, int maxItems, String type) {
+template <typename SerialInterface>
+int A6lib<SerialInterface>::getSMSLocsOfType(int* buf, int maxItems, String type) {
     String seqStart = "+CMGL: ";
     String response = "";
 
@@ -283,10 +291,11 @@ int A6lib::getSMSLocsOfType(int* buf, int maxItems, String type) {
 }
 
 // Return the SMS at index.
-SMSmessage A6lib::readSMS(int index) {
+template <typename SerialInterface>
+SMSmessage A6lib<SerialInterface>::readSMS(int index) {
     String response = "";
     char buffer[30];
-
+    
     // Issue the command and wait for the response.
     sprintf(buffer, "AT+CMGR=%d", index);
     A6command(buffer, "\xff\r\nOK\r\n", "\r\nOK\r\n", A6_CMD_TIMEOUT, 2, &response);
@@ -300,27 +309,32 @@ SMSmessage A6lib::readSMS(int index) {
     };
 
     // Parse the response if it contains a valid +CLCC.
-    respStart = response.indexOf("+CMGR");
+    respStart = response.indexOf("+CMGL");
     if (respStart >= 0) {
         // Parse the message header.
-        sscanf(response.substring(respStart).c_str(), "+CMGR: \"REC %s\",\"%s\",,\"%s\"\r\n", type, number, date);
+        int index;
+        char msg_buffer[256];
+        sscanf(response.substring(respStart).c_str(), "+CMGL: %d\"REC %s\",\"%s\",,\"%s\"\r\n%s", 
+                                                      &index, type, number, date, msg_buffer);
         sms.number = String(number);
         sms.date = String(date);
         // The rest is the message, extract it.
-        sms.message = response.substring(strlen(type) + strlen(number) + strlen(date) + 24, response.length() - 8);
+        sms.message = String(msg_buffer);
     }
     return sms;
 }
 
 // Delete the SMS at index.
-byte A6lib::deleteSMS(int index) {
+template <typename SerialInterface>
+byte A6lib<SerialInterface>::deleteSMS(int index) {
     char buffer[20];
     sprintf(buffer, "AT+CMGD=%d", index);
     return A6command(buffer, "OK", "yy", A6_CMD_TIMEOUT, 2, NULL);
 }
 
 // Delete SMS with special flags; example 1,4 delete all SMS from the storage area
-byte A6lib::deleteSMS(int index, int flag) {
+template <typename SerialInterface>
+byte A6lib<SerialInterface>::deleteSMS(int index, int flag) {
     String command = "AT+CMGD=";
     command += String(index);
     command += ",";
@@ -329,7 +343,8 @@ byte A6lib::deleteSMS(int index, int flag) {
 }
 
 // Set the SMS charset.
-byte A6lib::setSMScharset(String charset) {
+template <typename SerialInterface>
+byte A6lib<SerialInterface>::setSMScharset(String charset) {
     char buffer[30];
 
     sprintf(buffer, "AT+CSCS=\"%s\"", charset.c_str());
@@ -339,11 +354,12 @@ byte A6lib::setSMScharset(String charset) {
 
 // Set the volume for the speaker. level should be a number between 5 and
 // 8 inclusive.
-void A6lib::setVol(byte level) {
+template <typename SerialInterface>
+void A6lib<SerialInterface>::setVol(byte level) {
     char buffer[30];
 
     // level should be between 5 and 8.
-    level = min(max(level, 5), 8);
+    level = math::min(math::max(level, 5), 8);
     sprintf(buffer, "AT+CLVL=%d", level);
     A6command(buffer, "OK", "yy", A6_CMD_TIMEOUT, 2, NULL);
 }
@@ -351,11 +367,12 @@ void A6lib::setVol(byte level) {
 
 // Enable the speaker, rather than the headphones. Pass 0 to route audio through
 // headphones, 1 through speaker.
-void A6lib::enableSpeaker(byte enable) {
+template <typename SerialInterface>
+void A6lib<SerialInterface>::enableSpeaker(byte enable) {
     char buffer[30];
 
     // enable should be between 0 and 1.
-    enable = min(max(enable, 0), 1);
+    enable = math::min(math::max(enable, 0), 1);
     sprintf(buffer, "AT+SNFS=%d", enable);
     A6command(buffer, "OK", "yy", A6_CMD_TIMEOUT, 2, NULL);
 }
@@ -368,8 +385,8 @@ void A6lib::enableSpeaker(byte enable) {
 
 
 // Autodetect the connection rate.
-
-long A6lib::detectRate() {
+template <typename SerialInterface>
+long A6lib<SerialInterface>::detectRate() {
     unsigned long rate = 0;
     unsigned long rates[] = {9600, 115200};
 
@@ -378,7 +395,7 @@ long A6lib::detectRate() {
     for (int i = 0; i < countof(rates); i++) {
         rate = rates[i];
 
-        A6conn->begin(rate);
+        _serial.begin(rate);
         log("Trying rate ");
         log(rate);
         logln("...");
@@ -396,7 +413,9 @@ long A6lib::detectRate() {
 
 
 // Set the A6 baud rate.
-char A6lib::setRate(long baudRate) {
+template <typename SerialInterface>
+char A6lib<SerialInterface>::setRate(long baudRate) 
+{
     int rate = 0;
 
     rate = detectRate();
@@ -416,7 +435,7 @@ char A6lib::setRate(long baudRate) {
 
     logln("Switching to the new rate...");
     // Begin the connection again at the requested rate.
-    A6conn->begin(baudRate);
+    _serial.begin(baudRate);
     logln("Rate set.");
 
     return A6_OK;
@@ -424,10 +443,11 @@ char A6lib::setRate(long baudRate) {
 
 
 // Read some data from the A6 in a non-blocking manner.
-String A6lib::read() {
+template <typename SerialInterface>
+String A6lib<SerialInterface>::read() {
     String reply = "";
-    if (A6conn->available()) {
-        reply = A6conn->readString();
+    if (_serial.available()) {
+        reply = _serial.readString();
     }
 
     // XXX: Replace NULs with \xff so we can match on them.
@@ -441,19 +461,20 @@ String A6lib::read() {
 
 
 // Issue a command.
-byte A6lib::A6command(const char *command, const char *resp1, const char *resp2, int timeout, int repetitions, String *response) {
+template <typename SerialInterface>
+byte A6lib<SerialInterface>::A6command(const char *command, const char *resp1, const char *resp2, int timeout, int repetitions, String *response) {
     byte returnValue = A6_NOTOK;
     byte count = 0;
 
     // Get rid of any buffered output.
-    A6conn->flush();
+    _serial.flush();
 
     while (count < repetitions && returnValue != A6_OK) {
         log("Issuing command: ");
         logln(command);
 
-        A6conn->write(command);
-        A6conn->write('\r');
+        _serial.write(command);
+        _serial.write('\r');
 
         if (A6waitFor(resp1, resp2, timeout, response) == A6_OK) {
             returnValue = A6_OK;
@@ -467,7 +488,8 @@ byte A6lib::A6command(const char *command, const char *resp1, const char *resp2,
 
 
 // Wait for responses.
-byte A6lib::A6waitFor(const char *resp1, const char *resp2, int timeout, String *response) {
+template <typename SerialInterface>
+byte A6lib<SerialInterface>::A6waitFor(const char *resp1, const char *resp2, int timeout, String *response) {
     unsigned long entry = millis();
     String reply = "";
     byte retVal = 99;
@@ -503,3 +525,5 @@ byte A6lib::A6waitFor(const char *resp1, const char *resp2, int timeout, String 
     }
     return retVal;
 }
+
+template class A6lib<HardwareSerial>;

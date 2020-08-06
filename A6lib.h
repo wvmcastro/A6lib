@@ -2,7 +2,6 @@
 #define A6lib_h
 
 #include <Arduino.h>
-#include "SoftwareSerial.h"
 
 #ifdef DEBUG
 #define log(msg) Serial.print(msg)
@@ -13,7 +12,7 @@
 #endif
 
 #define countof(a) (sizeof(a) / sizeof(a[0]))
-
+// template <typename SerialInterface>
 #define A6_OK 0
 #define A6_NOTOK 1
 #define A6_TIMEOUT 2
@@ -66,10 +65,10 @@ struct callInfo {
     int type;
 };
 
-
+template <typename SerialInterface>
 class A6lib {
 public:
-    A6lib(int transmitPin, int receivePin);
+    A6lib(SerialInterface& _serial);
     ~A6lib();
 
     byte begin(long baudRate);
@@ -100,12 +99,15 @@ public:
 
     String getRealTimeClock();
 
-    SoftwareSerial *A6conn;
 private:
+    SerialInterface& _serial;
     String read();
-    byte A6command(const char *command, const char *resp1, const char *resp2, int timeout, int repetitions, String *response);
-    byte A6waitFor(const char *resp1, const char *resp2, int timeout, String *response);
+    byte A6command(const char *command, const char *resp1, const char *resp2, 
+                   int timeout, int repetitions, String *response);
+    byte A6waitFor(const char *resp1, const char *resp2, int timeout, 
+                   String *response);
     long detectRate();
     char setRate(long baudRate);
 };
+
 #endif
